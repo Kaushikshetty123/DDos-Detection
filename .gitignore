@@ -1,0 +1,22 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated runtime files
+dashboard_state.json
+dashboard_control.json
+
+# Dataset generated during experiments
+dataset/network_telemetry.csv
+dataset/live_predictions.csv
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+
+ryu_controller_backup.py
+ryu_controller_before_delta_fix.py
+ryu_controller_old.py
+train_model_old.py

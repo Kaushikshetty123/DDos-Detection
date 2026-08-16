@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SDN DDoS Detection Dashboard</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel2:#243449;--line:#334155;--text:#e2e8f0;
+    --muted:#94a3b8;--sky:#38bdf8;--green:#22c55e;--amber:#f59e0b;--red:#ef4444}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:12px}
+  .pill{padding:5px 12px;border-radius:999px;font-weight:600;font-size:12px}
+  .pill.safe{background:rgba(34,197,94,.15);color:var(--green);border:1px solid var(--green)}
+  .pill.dos{background:rgba(245,158,11,.15);color:var(--amber);border:1px solid var(--amber)}
+  .pill.ddos{background:rgba(239,68,68,.15);color:var(--red);border:1px solid var(--red)}
+  .pill.off{background:rgba(148,163,184,.12);color:var(--muted);border:1px solid var(--line)}
+  main{padding:20px 24px;max-width:1550px;margin:0 auto}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;font-weight:600}
+  .grid{display:grid;gap:16px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .card .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .card .value{font-size:23px;font-weight:700;margin-top:5px}
+  .card.att{border-left:3px solid var(--red)} .card.norm{border-left:3px solid var(--green)}
+  .two{grid-template-columns:1fr 1fr;margin-bottom:18px}
+  @media(max-width:1040px){.two{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px}
+  label.fld{display:block;margin-bottom:11px}
+  label.fld span{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+  input,select{width:100%;padding:9px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:14px}
+  .inline{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .radios{display:flex;gap:8px;flex-wrap:wrap}
+  .chk{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);padding:8px 12px;border-radius:8px;cursor:pointer}
+  .btn{padding:10px 16px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px}
+  .btn.apply{background:var(--sky);color:#04212e}.btn.start{background:var(--red);color:#2b0707}
+  .btn.stop{background:var(--panel2);color:var(--text);border:1px solid var(--line)}.btn.all{background:var(--amber);color:#2b1c02}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+  td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .tblwrap{max-height:260px;overflow:auto}
+  .tag{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .tag.att{background:rgba(239,68,68,.15);color:var(--red)}.tag.norm{background:rgba(34,197,94,.15);color:var(--green)}
+  .tag.blk{background:rgba(148,163,184,.2);color:var(--muted)}
+  .events{max-height:200px;overflow:auto;font-size:12px}
+  .ev{padding:6px 9px;border-bottom:1px solid var(--line);display:flex;gap:10px}
+  .ev .t{color:var(--muted);white-space:nowrap}.ev .m{color:var(--red)}
+  .muted{color:var(--muted)}
+  .statusline{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin:6px 0}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  canvas{width:100%;height:150px;display:block}
+  svg{width:100%;height:340px}
+  .nlabel{fill:var(--text);font-size:12px;font-weight:600}.nip{fill:var(--muted);font-size:10px}
+  .flash{animation:flash 1s ease}@keyframes flash{0%{background:rgba(239,68,68,.25)}100%{background:transparent}}
+  .note{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12px;color:var(--muted);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🛡️ SDN DDoS Detection &amp; Mitigation Dashboard</h1>
+    <div class="sub">Mininet + Ryu + ML flow classification · live experiment data · normal + attack traffic run together</div></div>
+  <div id="hdrStatus" class="pill off">CONNECTING…</div>
+</header>
+
+<main>
+  <section class="grid cards" id="cards"></section>
+
+  <div class="grid two">
+    <!-- CONFIG -->
+    <section class="panel" style="margin-bottom:0">
+      <h2>⚙️ Simulation &amp; Attack Configuration</h2>
+      <div class="statusline">
+        <span class="pill off" id="normalPill">NORMAL: idle</span>
+        <span class="pill off" id="attackPill">ATTACK: idle</span>
+      </div>
+      <div class="inline">
+        <label class="fld"><span>Number of attackers</span><input type="number" id="numAtt" min="0" value="3"></label>
+        <label class="fld"><span>Number of normal users</span><input type="number" id="numNorm" min="0" value="3"></label>
+      </div>
+      <div class="inline">
+        <label class="fld"><span>Victim host</span><select id="victimSel"></select></label>
+        <label class="fld"><span>Attack type</span>
+          <div class="radios" id="typeRadios">
+            <label class="chk"><input type="radio" name="atype" value="dos">⚠️ DoS</label>
+            <label class="chk"><input type="radio" name="atype" value="ddos" checked>🚨 DDoS</label>
+          </div></label>
+      </div>
+      <div class="inline">
+        <label class="fld"><span>Packet-rate limit (pkt/s)</span><input type="number" id="pktLimit" min="1" step="10"></label>
+        <label class="fld"><span>Byte-rate limit (byte/s)</span><input type="number" id="byteLimit" min="1" step="1000"></label>
+      </div>
+      <div class="row">
+        <button class="btn apply" id="btnApply">✓ Apply &amp; Run Normal</button>
+        <button class="btn start" id="btnAttack">▶ Start Attack</button>
+        <button class="btn stop" id="btnStopAtk">■ Stop Attack</button>
+        <button class="btn all" id="btnStopAll">⏻ Stop All</button>
+      </div>
+      <div class="note" id="cfgNote">Configure, then Apply to start continuous normal traffic. Start Attack layers attackers on top.</div>
+    </section>
+
+    <!-- NETWORK VIZ -->
+    <section class="panel" style="margin-bottom:0">
+      <h2>🌐 Network Flow — users → switch → victim</h2>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--green)"></span>Normal traffic</span>
+        <span><span class="dot" style="background:var(--red)"></span>Attack traffic</span>
+        <span><span class="dot" style="background:var(--muted)"></span>Blocked at switch</span>
+      </div>
+      <svg id="netsvg" viewBox="0 0 820 340" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <path id="pN1" d="M190,80 L360,170"/><path id="pA1" d="M190,270 L360,170"/>
+          <path id="pV"  d="M470,170 L650,170"/>
+        </defs>
+        <line x1="190" y1="80"  x2="365" y2="170" stroke="#22c55e" stroke-width="2" id="lnkN" opacity=".5"/>
+        <line x1="190" y1="270" x2="365" y2="170" stroke="#ef4444" stroke-width="2" id="lnkA" opacity=".5"/>
+        <line x1="455" y1="170" x2="650" y2="170" stroke="#334155" stroke-width="2" id="lnkV"/>
+        <!-- normal cluster -->
+        <g><rect x="30" y="45" width="160" height="70" rx="10" fill="#243449" stroke="#22c55e" stroke-width="2"/>
+          <text x="110" y="72" text-anchor="middle" class="nlabel">🖥️ Normal users</text>
+          <text x="110" y="94" text-anchor="middle" class="nip" id="normCount">0 hosts</text></g>
+        <!-- attacker cluster -->
+        <g><rect x="30" y="235" width="160" height="70" rx="10" fill="#243449" stroke="#ef4444" stroke-width="2"/>
+          <text x="110" y="262" text-anchor="middle" class="nlabel">💻 Attackers</text>
+          <text x="110" y="284" text-anchor="middle" class="nip" id="attCount">0 hosts</text></g>
+        <!-- switch -->
+        <g><rect x="365" y="140" width="90" height="60" rx="10" fill="#243449" stroke="#38bdf8" stroke-width="2" id="swBox"/>
+          <text x="410" y="166" text-anchor="middle" class="nlabel">🔀 s1</text>
+          <text x="410" y="184" text-anchor="middle" class="nip">OF switch</text></g>
+        <text x="410" y="128" text-anchor="middle" font-size="18" id="shield" style="display:none">🛡️</text>
+        <!-- victim -->
+        <g><rect x="650" y="138" width="120" height="64" rx="10" fill="#243449" stroke="#22c55e" stroke-width="2" id="vicBox"/>
+          <text x="710" y="164" text-anchor="middle" class="nlabel">🎯 Victim</text>
+          <text x="710" y="184" text-anchor="middle" class="nip" id="vicIpLbl">10.0.0.2</text></g>
+        <!-- packets -->
+        <circle r="5" fill="#22c55e" id="pkN1" style="display:none"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pN1"/></animateMotion></circle>
+        <circle r="5" fill="#22c55e" id="pkNV" style="display:none"><animateMotion dur="1.3s" repeatCount="indefinite"><mpath href="#pV"/></animateMotion></circle>
+        <circle r="5" fill="#ef4444" id="pkA1" style="display:none"><animateMotion dur="0.8s" repeatCount="indefinite"><mpath href="#pA1"/></animateMotion></circle>
+        <circle r="5" fill="#ef4444" id="pkAV" style="display:none"><animateMotion dur="0.8s" repeatCount="indefinite"><mpath href="#pV"/></animateMotion></circle>
+      </svg>
+      <div class="muted" id="vizNote" style="margin-top:4px">Idle.</div>
+    </section>
+  </div>
+
+  <!-- SWITCH MONITOR -->
+  <section class="panel">
+    <h2>🔀 Switch / SDN Monitor — traffic separated by source type</h2>
+    <div class="grid cards" id="switchCards" style="margin-bottom:14px"></div>
+    <div class="grid two">
+      <div>
+        <h2>Attacker vs Normal packet-rate (live)</h2>
+        <div class="legend"><span><span class="dot" style="background:var(--green)"></span>Normal users (left axis)</span>
+          <span><span class="dot" style="background:var(--red)"></span>Attackers (right axis)</span></div>
+        <canvas id="switchChart" width="720" height="150"></canvas>
+        <h2 style="margin-top:16px">Per-source flow statistics &amp; ML prediction</h2>
+        <div class="tblwrap"><table id="srcTable"><thead><tr>
+          <th>Source</th><th>IP</th><th>Role</th><th>pkt/s</th><th>ML</th><th>Conf.</th><th>State</th>
+        </tr></thead><tbody><tr><td colspan="7" class="muted">Waiting…</td></tr></tbody></table></div>
+      </div>
+      <div>
+        <h2>Detection &amp; mitigation events</h2>
+        <div class="events" id="events"><div class="muted" style="padding:8px">No events yet.</div></div>
+        <h2 style="margin-top:16px">🛡️ Blocked attackers</h2>
+        <div id="blocked" class="muted">None.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VICTIM MONITOR -->
+  <section class="panel">
+    <h2>🎯 Victim Monitor</h2>
+    <div class="statusline"><span class="muted">Victim <b id="victimIp">10.0.0.2</b>:</span>
+      <span id="victimStatus" class="pill safe">SAFE</span></div>
+    <div class="grid cards" id="victimCards" style="margin-bottom:14px"></div>
+    <h2>Incoming traffic — normal vs attack (live)</h2>
+    <div class="legend"><span><span class="dot" style="background:var(--green)"></span>Normal in (left axis)</span>
+      <span><span class="dot" style="background:var(--red)"></span>Attack in (right axis)</span>
+      <span class="muted">· independent scales, so normal stays visible</span></div>
+    <canvas id="victimChart" width="720" height="150"></canvas>
+  </section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const fmt=n=>{n=Number(n)||0;return n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(2)+"k":n.toFixed(n<10&&n%1?2:0)};
+let lastBlocked=0, HIST=[], POOL=[], IPS={};
+
+async function api(p,m="GET",b){const o={method:m,headers:{"Content-Type":"application/json"}};if(b)o.body=JSON.stringify(b);return (await fetch(p,o)).json();}
+
+function readCfg(){return{
+  num_attackers:parseInt($("#numAtt").value)||0,
+  num_normal:parseInt($("#numNorm").value)||0,
+  victim:$("#victimSel").value,
+  attack_type:$('input[name=atype]:checked').value,
+  pkt_rate_limit:parseFloat($("#pktLimit").value)||300,
+  byte_rate_limit:parseFloat($("#byteLimit").value)||300000
+};}
+
+$("#btnApply").onclick=async()=>{const r=await api("/api/config","POST",readCfg());
+  $("#cfgNote").textContent="Applied. Normal traffic running for "+r.config.num_normal+" users.";};
+$("#btnAttack").onclick=async()=>{await api("/api/config","POST",readCfg());
+  const r=await api("/api/attack/start","POST");$("#vizNote").textContent=r.message||"";};
+$("#btnStopAtk").onclick=async()=>{const r=await api("/api/attack/stop","POST");$("#vizNote").textContent=r.message||"";};
+$("#btnStopAll").onclick=async()=>{const r=await api("/api/stop_all","POST");$("#vizNote").textContent=r.message||"";};
+
+function statusPill(el,s){el.className="pill "+(s==="DDOS"?"ddos":s==="DOS"?"dos":s==="NORMAL"?"safe":"off");
+  el.textContent=({DDOS:"🚨 DDoS DETECTED",DOS:"⚠️ DoS DETECTED",NORMAL:"🟢 NORMAL"})[s]||s;}
+function card(l,v,s,cls){return `<div class="card ${cls||''}"><div class="label">${l}</div><div class="value">${v}</div>${s?`<div class="muted" style="font-size:11px;margin-top:3px">${s}</div>`:""}</div>`;}
+
+function drawChart(canvas,series){const ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);ctx.strokeStyle="#334155";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(38,H-18);ctx.lineTo(W-6,H-18);ctx.moveTo(38,6);ctx.lineTo(38,H-18);ctx.stroke();
+  let max=10;series.forEach(s=>s.pts.forEach(v=>{if(v>max)max=v}));
+  ctx.fillStyle="#94a3b8";ctx.font="10px sans-serif";ctx.fillText(Math.round(max),4,12);ctx.fillText("0",24,H-20);
+  const x0=38,x1=W-6,y0=6,y1=H-18;
+  series.forEach(s=>{const n=s.pts.length;if(!n)return;ctx.beginPath();
+    s.pts.forEach((v,i)=>{const x=x0+(x1-x0)*(n<=1?1:i/(n-1)),y=y1-(y1-y0)*(v/max);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.strokeStyle=s.color;ctx.lineWidth=2;ctx.stroke();});}
+
+// Two independent Y-axes: left series (green/normal) scales to its own
+// max, right series (red/attack) to its own. This keeps low-rate normal
+// traffic visible even when the attack rate is orders of magnitude larger.
+function drawDualChart(canvas,left,right){
+  const ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const x0=46,x1=W-52,y0=8,y1=H-18;
+  ctx.strokeStyle="#334155";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x0,y1);ctx.lineTo(x1,y1);ctx.moveTo(x0,y0);ctx.lineTo(x0,y1);ctx.moveTo(x1,y0);ctx.lineTo(x1,y1);ctx.stroke();
+  const lMax=Math.max(10,...left.pts),rMax=Math.max(10,...right.pts);
+  function plot(s,mx){const n=s.pts.length;if(!n)return;ctx.beginPath();
+    s.pts.forEach((v,i)=>{const x=x0+(x1-x0)*(n<=1?1:i/(n-1)),y=y1-(y1-y0)*Math.min(1,(Number(v)||0)/mx);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.strokeStyle=s.color;ctx.lineWidth=2;ctx.stroke();}
+  plot(left,lMax);plot(right,rMax);
+  ctx.font="10px sans-serif";
+  ctx.fillStyle=left.color;ctx.textAlign="right";ctx.fillText(fmt(lMax),x0-4,12);ctx.fillText("0",x0-4,y1);
+  ctx.fillStyle=right.color;ctx.textAlign="left";ctx.fillText(fmt(rMax),x1+5,12);ctx.fillText("0",x1+5,y1);
+  ctx.textAlign="left";}
+
+function updateViz(roles,cfg,st){
+  const normOn=cfg.normal_running&&roles.normal.count>0;
+  const atkOn=cfg.attack_running&&roles.attacker.count>0;
+  const allBlocked=roles.attacker.count>0&&roles.attacker.blocked>=roles.attacker.count;
+  const atkReaches=atkOn&&!allBlocked;
+  $("#pkN1").style.display=normOn?"inline":"none";
+  $("#pkNV").style.display=normOn?"inline":"none";
+  $("#pkA1").style.display=atkOn?"inline":"none";
+  $("#pkAV").style.display=atkReaches?"inline":"none";
+  $("#shield").style.display=(atkOn&&allBlocked)?"inline":"none";
+  $("#swBox").setAttribute("stroke",atkReaches?"#ef4444":"#38bdf8");
+  $("#lnkA").setAttribute("stroke-dasharray",allBlocked?"5,5":"0");
+  const under=st.victim&&st.victim.status==="UNDER ATTACK";
+  $("#vicBox").setAttribute("stroke",under?"#ef4444":"#22c55e");
+  $("#normCount").textContent=roles.normal.count+" active";
+  $("#attCount").textContent=roles.attacker.count+" active"+(roles.attacker.blocked?" · "+roles.attacker.blocked+" blocked":"");
+  if(atkOn&&allBlocked)$("#vizNote").innerHTML="🛡️ Attackers blocked at s1 — attack dropped, normal traffic still reaching victim.";
+  else if(atkReaches)$("#vizNote").innerHTML="🚨 Attack + normal traffic flowing to victim.";
+  else if(normOn)$("#vizNote").innerHTML="🟢 Normal traffic flowing to victim.";
+  else $("#vizNote").textContent="Idle.";
+}
+
+async function tick(){
+  let d;try{d=await api("/api/stats");}catch(e){$("#hdrStatus").className="pill off";$("#hdrStatus").textContent="BACKEND OFFLINE";return;}
+  const cfg=d.config||{},st=d.state||{},roles=d.roles||{attacker:{},normal:{},total:{}};
+  const A=roles.attacker||{},N=roles.normal||{},T=roles.total||{};
+  const connected=d.connected&&st.detection_status;
+
+  connected?statusPill($("#hdrStatus"),st.detection_status):(()=>{$("#hdrStatus").className="pill off";$("#hdrStatus").textContent="WAITING FOR CONTROLLER";})();
+
+  // pills
+  const np=$("#normalPill");np.className="pill "+(cfg.normal_running?"safe":"off");np.textContent="NORMAL: "+(cfg.normal_running?N.count+" users":"idle");
+  const ap=$("#attackPill");ap.className="pill "+(cfg.attack_running?"ddos":"off");ap.textContent="ATTACK: "+(cfg.attack_running?(cfg.attack_type||"").toUpperCase():"idle");
+
+  // history (real role rates)
+  HIST.push({att:A.pkt_rate||0,norm:N.pkt_rate||0});if(HIST.length>60)HIST.shift();
+
+  // summary cards
+  $("#cards").innerHTML=
+    card("Active attackers",A.count??0,cfg.attack_running?"flooding":"idle","att")
+   +card("Normal users",N.count??0,cfg.normal_running?"sending":"idle","norm")
+   +card("Attacker pkt/s",fmt(A.pkt_rate),"to victim","att")
+   +card("Normal pkt/s",fmt(N.pkt_rate),"to victim","norm")
+   +card("Total pkt/s",fmt(T.pkt_rate),"combined")
+   +card("Detected",st.detection_status||"—",st.mode||"")
+   +card("Blocked",(st.blocked||[]).length,"drop rules")
+   +card("Victim",(st.victim||{}).status||"—",(st.victim||{}).ip||"");
+
+  // switch cards (separated)
+  $("#switchCards").innerHTML=
+    card("Attacker pkt/s",fmt(A.pkt_rate),(A.count||0)+" sources","att")
+   +card("Attacker byte/s",fmt(A.byte_rate),null,"att")
+   +card("Normal pkt/s",fmt(N.pkt_rate),(N.count||0)+" users","norm")
+   +card("Normal byte/s",fmt(N.byte_rate),null,"norm")
+   +card("Total pkt/s",fmt(T.pkt_rate),"all sources")
+   +card("Status",st.detection_status||"—",(st.aggregate||{}).flooding_sources+" flooding");
+
+  // switch chart (2 lines)
+  drawDualChart($("#switchChart"),{pts:HIST.map(h=>h.norm),color:"#22c55e"},{pts:HIST.map(h=>h.att),color:"#ef4444"});
+
+  // per-source table
+  const rows=st.sources||[],roleByMac={};(d.hosts||[]).forEach(h=>roleByMac[h.ip]=h.role);
+  const tb=$("#srcTable tbody");
+  if(!rows.length)tb.innerHTML='<tr><td colspan="7" class="muted">Waiting for traffic…</td></tr>';
+  else tb.innerHTML=rows.map(s=>{const role=roleByMac[s.ip]||"—";
+    const rtag=role==="attacker"?'<span class="tag att">attacker</span>':role==="normal"?'<span class="tag norm">normal</span>':role;
+    const conf=Object.entries(s.confidence||{}).map(([k,v])=>k+" "+v+"%").join(" · ");
+    const ml=s.blocked?'<span class="tag blk">blocked</span>':(s.prediction===2?'<span class="tag att">DDoS-Flood</span>':'<span class="tag norm">Normal</span>');
+    const state=s.blocked?"🛡️ blocked":(s.pkt_rate>0?"active":"—");
+    return `<tr><td class="mono">${s.mac}</td><td>${s.ip}</td><td>${rtag}</td><td>${fmt(s.pkt_rate)}</td><td>${ml}</td><td class="muted">${conf||"—"}</td><td>${state}</td></tr>`;}).join("");
+
+  // events + blocked
+  const ev=st.events||[];
+  $("#events").innerHTML=ev.length?ev.map(e=>`<div class="ev"><span class="t">${new Date(e.t*1000).toLocaleTimeString()}</span><span class="m">${e.type==="MITIGATION"?"🛡️ ":"• "}${e.message}</span></div>`).join(""):'<div class="muted" style="padding:8px">No events yet.</div>';
+  const bl=st.blocked||[];
+  $("#blocked").innerHTML=bl.length?bl.map(b=>`<span class="tag att" style="margin:2px;display:inline-block">${b.mac} (${b.ip})</span>`).join(""):'<span class="muted">None.</span>';
+  if(bl.length>lastBlocked){$("#blocked").classList.add("flash");setTimeout(()=>$("#blocked").classList.remove("flash"),1000);}
+  lastBlocked=bl.length;
+
+  // victim
+  const vic=st.victim||{};
+  $("#victimIp").textContent=vic.ip||"";$("#vicIpLbl").textContent=vic.ip||"";
+  const vs=$("#victimStatus");
+  if(vic.status==="UNDER ATTACK"){vs.className="pill ddos";vs.textContent="🚨 UNDER ATTACK";}else{vs.className="pill safe";vs.textContent="🟢 SAFE";}
+  $("#victimCards").innerHTML=
+    card("Normal in pkt/s",fmt(N.pkt_rate),null,"norm")
+   +card("Attack in pkt/s",fmt(A.pkt_rate),null,"att")
+   +card("Total in pkt/s",fmt(vic.pkt_rate))
+   +card("Total in byte/s",fmt(vic.byte_rate))
+   +card("Total packets",fmt(vic.total_packets))
+   +card("Total bytes",fmt(vic.total_bytes));
+  drawDualChart($("#victimChart"),{pts:HIST.map(h=>h.norm),color:"#22c55e"},{pts:HIST.map(h=>h.att),color:"#ef4444"});
+
+  updateViz(roles,cfg,st);
+}
+
+// init form from backend
+(async()=>{
+  try{const c=await api("/api/config");POOL=c.pool||[];IPS=c.ips||{};
+    const cfg=c.config||{};
+    $("#numAtt").value=cfg.num_attackers??3;$("#numNorm").value=cfg.num_normal??3;
+    $("#numAtt").max=(c.max_hosts||20)-1;$("#numNorm").max=(c.max_hosts||20)-1;
+    $("#pktLimit").value=cfg.pkt_rate_limit??300;$("#byteLimit").value=cfg.byte_rate_limit??300000;
+    $("#victimSel").innerHTML=POOL.map(n=>`<option value="${n}" ${n===cfg.victim?"selected":""}>${n} (${IPS[n]||""})</option>`).join("");
+    const r=document.querySelector(`input[name=atype][value="${cfg.attack_type||"ddos"}"]`);if(r)r.checked=true;
+    $("#cfgNote").textContent="Pool: "+POOL.length+" hosts (max "+(c.max_hosts||20)+"). 1 victim + up to "+(POOL.length-1)+" attackers/normal users.";
+  }catch(e){}
+  tick();setInterval(tick,1500);
+})();
+</script>
+</body>
+</html>
